@@ -1,6 +1,6 @@
 ---
-title: 'Final Project: Guidance Document'
-author: "Author Name"
+title: 'Final Project: Crimes In Boston'
+author: "Josue Perez Gomez"
 date: "Due December 16, 2019"
 output:
   pdf_document: default
