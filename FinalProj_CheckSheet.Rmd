@@ -1,5 +1,7 @@
 ---
-title: "R Notebook"
+title: "Firearm Murders"
+author: "Josue Perez Gomez"
+date: "12/14/2019"
 output: html_notebook
 ---
 
@@ -14,16 +16,17 @@ library(tidyverse)
 library(DataComputing)
 library(dplyr)
 library(lubridate)
+library(party)
 ```
 
 ##Purpose
-**The purpose of this project is to compare how well and how much has the rate of murders with fire arms has decrease when compared to the amount of money invested and place into public services such as police, parks, events, libraries, etc... **
+**The purpose of this project is evaluate and examine the number of murders by firearms on different states and years in the US. As well as to compare them with the level of unemployement in those states during those years. Trying to solve the question of does higer unemployment leads to highes murders by firearms, this is done so we can propose solutions to murders.  **
 
-##Data Access
+##Data Access 
 ```{r}
-FirearmMurdersData <- read.csv(file = file.choose(), stringsAsFactors = F)
+FirearmMurdersData <- read.csv(file = "Firearm Murders.csv", stringsAsFactors = F)
 
-str(FirearmMurdersData)
+str(FirearmMurdersData) 
 
 glimpse(FirearmMurdersData)
 
@@ -36,114 +39,241 @@ names(FirearmMurdersData)
 nrow(FirearmMurdersData)
 
 ncol(FirearmMurdersData)
+
+
+UnemploymentData <- read.csv(file = "UnemploymentPercent.csv", stringsAsFactors = F)
 ```
 
 
-##Modifying elements in the data
+###Modifying Elements in the Data
 ```{r}
-#Getting the type elements to merge from handgun and handguns to just handgun
+
 FirearmMurdersData$Type = as.factor(FirearmMurdersData$Type)
 levels(FirearmMurdersData$Type) <- c("Handgun", "Handgun", "Rifle","Rifle", "Shotgun","Shotgun", "Unknown") 
 FirearmMurdersData$Type = as.character(FirearmMurdersData$Type)
 ```
 
 
-##Data Wrangling
+#Data Wrangling 
+
+###Finding Murder Number per Type in Pennsylvania
 ```{r}
-#Finding murder number per type in Pennsylvania
+
 FirearmMurdersData %>%
   filter(State == "Pennsylvania") %>%
   group_by(State, Type) %>%
   summarise(total = sum(Total)) %>%
   arrange(desc(total))
+```
 
-#Finding the average number of murders per type for all the states
+
+###Finding The Average Number of Murders for All the States (Per Year)
+```{r}
 FirearmMurdersData %>%
+  select(State, Type, Total, Year) %>%
   filter(State != "National") %>%
-  group_by(By.Type) %>%
+  group_by(State) %>%
   summarise(average = mean(Total)) %>%
   arrange(desc(average))
 
+```
+**Here we found that the state of California was the state with the highest average firearm murders per year.**
 
-
-#Modifying the data to have only known of firearm and by state 
+###Modifying the data to have only known of firearm and by state 
+```{r}
 KnownFireArmMurders <- FirearmMurdersData %>%
   filter(State != "National" & Type != "Unknown") 
-  
-
-
-#Using a descicion tree
-
-
-
 
 ```
 
 
+
+###Joining Tables 
 ```{r}
-Sample <- FirearmMurdersData
-
-Sample$Type = as.factor(Sample$Type)
-levels(Sample$Type) <- c("Handgun", "Handgun", "Rifle","Rifle", "Shotgun","Shotgun", "Unknown") 
-Sample$Type = as.character(Sample$Type)
-
+#Modifying Original Data Set
+AverageUnemployment <- UnemploymentData %>%
+  filter(Year > 2003) %>%
+  group_by(Year,State) %>%
+  select(Year, State, Rate) %>%
+  dplyr::summarise(UnEmpRate = mean(Rate))
   
+#Joining by Year and State
+CombinedData <- KnownFireArmMurders %>%
+  dplyr::inner_join(AverageUnemployment)
 ```
 
 
-##Data Visualization
+###Finding the Years and States that had the Highest UnEmployment Rate
+```{r}
+
+CombinedData %>%
+  select(State, Year, UnEmpRate) %>%
+  group_by(State) %>%
+  dplyr::summarise(average = mean(UnEmpRate)) %>%
+  arrange(desc(average)) %>%
+  head(10)
+```
+**The data frame above we can see that California, Arizona, South Carolina, etc... to have been the states with the highest unemployment percentages**
+
+###Finding the Years and States that had the Lowest Unemployment Rate
+```{r}
+CombinedData %>%
+  select(State, Year, UnEmpRate) %>%
+  group_by(State) %>%
+  dplyr::summarise(average = mean(UnEmpRate)) %>%
+  arrange(desc(average)) %>%
+  tail(10)
+
+```
+
+**The data frame shows that states such as Hawaii, Montana, Vermont, etc... to have the lowest unemployment percentages.**
+
+
+###Creating a function that automates gather the average number of murders from two given states for a set of years
+```{r}
+getComparation <- function(name,Name, from, to)
+{
+  
+ComparedStates <- CombinedData %>%
+  filter(State == c(name, Name))
+  averages <- tibble(length = to-from)
+
+  for (i in from:to) {
+   averages[i-(from-1)] = ComparedStates %>%
+      filter(Year == i) %>%
+      dplyr::summarise(average = mean(Total))
+   
+   
+  }
+  print(averages)
+  rm(ComparedStates, averages)
+}
+
+getComparation("Alabama","Texas", 2007,2016)
+
+
+
+```
+
+
+#Data Visualization  
+
+
+
+
+###Descicion Tree 
+```{r}
+mod2 <- party::ctree(
+  UnEmpRate ~ By.Type + Total, 
+  data = CombinedData
+)
+
+plot(mod2,type = "simple")
+
+
+```
+**Here the descicion tree shows predicting unemployment rate based on the number of murders done by type and the total of the murders done by firearms.**
+
+
+
+
+
+###General Scatter Plot
 ```{r}
 FirearmMurdersData %>%
   ggplot(aes(x = Year, y = Total)) +
   geom_point() +
+  labs(title = "All Data Scatter Plot") +
   aes(colour = State)
 
-SpecialStates <- FirearmMurdersData %>%
-  group_by(Year) %>%
-  mutate(total = sum(Total)) %>%
-  arrange(desc(total)) %>%
-  head(7)
+```
+**Above a graph containing the total number of murders each year, colored by the each state (including National) When can see where the state record data recordings starts and where the National data recordings end.**
 
 
-FirearmMurdersData %>%
-  ggplot(aes(x = State, fill = Total)) +
-    geom_density(adjust = 1.1, alpha = .4) +
-    aes(colour = Type) +
-    labs(title = "Firearm Murder Density by Type and State") + 
-    theme(legend.position = "right") +
-    facet_grid(Type ~ State)
+###The Density of the Number of States Based on the Unemployment Rate 
+```{r}
+AverageUnemployment %>%
+  ggplot(aes(x = UnEmpRate)) +
+  geom_density(adjust = 0.34) +
+  aes(fill = UnEmpRate) +
+  labs(title = "Unemployment Density") +
+  theme(legend.position = "right")
+
+```
+**Based on this density graph we can observe that the density of most states fall under low unemployment rate, **
 
 
-
+###Boxplot of the number of murders done by the known type of weapon
+```{r}
 KnownFireArmMurders %>%
-  ggplot(aes(x = Year, y = Total.minus.Unknown)) +
-  geom_point() +
-  aes(colour = Type) +
-  geom_lm() +
-  facet_wrap(~Type, ncol=4)
+  ggplot(aes(x = Type, y = By.Type)) +
+  geom_boxplot() 
+  
+```
+**On the graph above we can see through a boxplot the type of known firearms, and from the boxplot we can see that in fact murders comitted with handguns are the more predominant**
 
-
-PennsylvaniaMurders <- FirearmMurdersData %>%
+###Gathering from Murders from Pennsylvania 
+```{r}
+PennsylvaniaMurders <- CombinedData %>%
   filter(State == "Pennsylvania")
 
 PennsylvaniaMurders %>%
-  ggplot(aes(x = Year, y = Total.minus.Unknown)) +
+  ggplot(aes(x = UnEmpRate, y = By.Type)) +
   geom_point() +
-  aes(colour = By.Type) +
+  aes(colour = Type) +
   geom_lm() +
   facet_wrap(~Type, ncol =4)
   
-
-
 ```
+**On the graph above it is shown how the number of murders have deacresed for handguns while for the rest it has been flat. However this deacreases when the unemployment rate grows.**
 
-
-
-##Other Requirements
+###Comparing UnRmployment Rate Against Total Number of Murders in the US by Type of Firearm
 ```{r}
+CombinedData %>%
+  ggplot(aes(x = UnEmpRate, y = Total)) +
+  geom_point() +
+  aes(shape = Type) +
+  facet_wrap(~Type, ncol = 4) +
+  stat_smooth(method = loess)
 
-ggplot(data=KnownFireArmMurders,aes(x=Year,y=Total.minus.Unknown))+geom_point()+aes(colour=Type)+facet_wrap(~Type,ncol=4) 
+linearMod <- lm(UnEmpRate ~ Total, data = CombinedData)
 ```
+
+**Despite from the graph avobe form Pennsylvania in the whole United States taking into account all of the statets there is a correlatations that shows that as the level of unemployment increases the number of murders committed by firearms does too. **
+
+###California, Arizona, South Carolina, 
+```{r}
+CaliforniaAndStates <- CombinedData %>%
+  filter(State == c("California", "Arizona", "South Carolina", "Michigan"))
+
+CaliforniaAndStates %>%
+  ggplot(aes(x= Year, y= Total)) +
+  geom_point() +
+  aes(colour = UnEmpRate) +
+  facet_wrap(~State, ncol = 4) +
+  geom_line()
+  
+```
+**Despite taking into account the states with the highest unemployment rate the graphs shows us that in states like Arizona and California when the unemployment level increases the number of murders decreased. In contrast in states like Michigan and South Carolina it remained flat. Howver the level of unemployment rose during the financial crisis around 2008-2009 so it could be that other factors where affecting the number of murders by fire arms**
+
+
+###California
+```{r}
+CombinedData %>%
+  filter(State == "California") %>%
+  ggplot(aes(x = UnEmpRate, y = By.Type)) +
+  geom_point() +
+  aes(colour = Type) +
+  geom_lm()
+  
+    
+```
+**From the graph above we can check that in fact in the state of California when the level of unemployment increased the number of murders comitted deacreased which seems to contradict popular believe.**
+
+
+
+#Conclusions
+**Based on the graphs and the data analyzed it was concluded that the level of murders by firearms decreased when the level of unemployment rose. This as told above contradicts what most people believe; more unemplyment more "crime". Despite this when both rates where compared on their respective years we can see that it was during the financial crisis form 2008 that increased the unemployment rate. This can tell us that maybe it was not that people where not employed that decreased the number of murders but the sentiment about the crisis**
 
 
 
